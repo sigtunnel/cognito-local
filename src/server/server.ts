@@ -61,7 +61,7 @@ export const createServer = (
     res.status(200).json({
       id_token_signing_alg_values_supported: ["RS256"],
       jwks_uri: `http://${containerName}:${containerPort}/${req.params.userPoolId}/.well-known/jwks.json`,
-      issuer: `http://${containerName}:${containerPort}/${req.params.userPoolId}`,
+      issuer: `http://localhost:9229/${req.params.userPoolId}`,
     });
   });
 
