@@ -26,6 +26,13 @@ A _Good Enough_ offline emulator for [Amazon Cognito](https://aws.amazon.com/cog
 
 <!-- tocstop -->
 
+## Build and push Docker image
+
+* Login to Docker Hub: `docker login --username=sigtunnel`
+* List all available local Docker images: `docker images`
+* Tag Docker image to match Docker Hub account: `docker tag 2a1c263e4d97 sigtunnel/aws_cognito:1.0`
+* Push Docker image to Docker Hub: `docker push sigtunnel/aws_cognito:1.0`
+
 ## Supported Features
 
 | Feature                          | Support              |

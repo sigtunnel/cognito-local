@@ -56,12 +56,14 @@ export const createServer = (
   });
 
   app.get("/:userPoolId/.well-known/openid-configuration", (req, res) => {
-    const containerName = process.env.CONTAINER_NAME || "localhost"
-    const containerPort = process.env.CONTAINER_PORT || "9229"
+    const jwksUriHostname = process.env.OPEN_ID_JWKS_URI_HOSTNAME || "localhost"
+    const jwksUriPort = process.env.OPEN_ID_JWKS_URI_PORT || "9229"
+    const issuerHostname = process.env.OPEN_ID_ISSUER_HOSTNAME || "localhost"
+    const issuerPort = process.env.OPEN_ID_ISSUER_PORT || "9229"
     res.status(200).json({
       id_token_signing_alg_values_supported: ["RS256"],
-      jwks_uri: `http://${containerName}:${containerPort}/${req.params.userPoolId}/.well-known/jwks.json`,
-      issuer: `http://localhost:9229/${req.params.userPoolId}`,
+      jwks_uri: `http://${jwksUriHostname}:${jwksUriPort}/${req.params.userPoolId}/.well-known/jwks.json`,
+      issuer: `http://${issuerHostname}:${issuerPort}/${req.params.userPoolId}`,
     });
   });
 
