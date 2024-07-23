@@ -6,6 +6,7 @@ A _Good Enough_ offline emulator for [Amazon Cognito](https://aws.amazon.com/cog
 
 <!-- toc -->
 
+- [Build and push Docker image](#build-and-push-docker-image)
 - [Supported Features](#supported-features)
   - [Lambda triggers](#lambda-triggers)
 - [Usage](#usage)
