@@ -1,22 +1,21 @@
-import {
+import type {
   SignUpRequest,
   SignUpResponse,
   UserStatusType,
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
 import * as uuid from "uuid";
 import { InvalidParameterError, UsernameExistsError } from "../errors";
-import { Messages, Services, UserPoolService } from "../services";
+import type { Messages, Services, UserPoolService } from "../services";
+import type { Context } from "../services/context";
 import { selectAppropriateDeliveryMethod } from "../services/messageDelivery/deliveryMethod";
-import { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
+import type { DeliveryDetails } from "../services/messageDelivery/messageDelivery";
 import {
   attribute,
   attributesAppend,
   attributesInclude,
-  attributeValue,
-  User,
+  type User,
 } from "../services/userPoolService";
-import { Target } from "./Target";
-import { Context } from "../services/context";
+import type { Target } from "./Target";
 
 export type SignUpTarget = Target<SignUpRequest, SignUpResponse>;
 
@@ -32,11 +31,11 @@ const deliverWelcomeMessage = async (
   user: User,
   userPool: UserPoolService,
   messages: Messages,
-  clientMetadata: Record<string, string> | undefined
+  clientMetadata: Record<string, string> | undefined,
 ): Promise<DeliveryDetails | null> => {
   const deliveryDetails = selectAppropriateDeliveryMethod(
     userPool.options.AutoVerifiedAttributes ?? [],
-    user
+    user,
   );
   if (!deliveryDetails && !userPool.options.AutoVerifiedAttributes) {
     // From the console: When Cognito's default verification method is not enabled, you must use APIs or Lambda triggers
@@ -45,7 +44,7 @@ const deliverWelcomeMessage = async (
   } else if (!deliveryDetails) {
     // TODO: I don't know what the real error message should be for this
     throw new InvalidParameterError(
-      "User has no attribute matching desired auto verified attributes"
+      "User has no attribute matching desired auto verified attributes",
     );
   }
 
@@ -57,7 +56,7 @@ const deliverWelcomeMessage = async (
     user,
     code,
     clientMetadata,
-    deliveryDetails
+    deliveryDetails,
   );
 
   return deliveryDetails;
@@ -82,10 +81,29 @@ export const SignUp =
       throw new UsernameExistsError();
     }
 
-    const attributes = attributesInclude("sub", req.UserAttributes)
-      ? req.UserAttributes ?? []
-      : [{ Name: "sub", Value: uuid.v4() }, ...(req.UserAttributes ?? [])];
+    const sub = uuid.v4();
+    const attributes =
+      (attributesInclude("sub", req.UserAttributes)
+        ? req.UserAttributes
+        : [{ Name: "sub", Value: sub }, ...(req.UserAttributes ?? [])]) ?? [];
     let userStatus: UserStatusType = "UNCONFIRMED";
+
+    let username = req.Username;
+    if (userPool.options.UsernameAttributes?.includes("email")) {
+      // user pool is configured to use the email attribute as the user's username
+      if (!req.Username.includes("@")) {
+        // naive validation that the username is an email
+        throw new InvalidParameterError("Username should be an email.");
+      }
+
+      if (!attributesInclude("email", attributes)) {
+        attributes.push({ Name: "email", Value: req.Username });
+      }
+
+      // when the username is an email address, cognito uses the sub as the username in
+      // requests/responses, triggers etc...
+      username = sub;
+    }
 
     if (triggers.enabled("PreSignUp")) {
       const { autoConfirmUser, autoVerifyEmail, autoVerifyPhone } =
@@ -94,7 +112,7 @@ export const SignUp =
           clientMetadata: req.ClientMetadata,
           source: "PreSignUp_SignUp",
           userAttributes: attributes,
-          username: req.Username,
+          username,
           userPoolId: userPool.options.Id,
           validationData: undefined,
         });
@@ -126,7 +144,7 @@ export const SignUp =
       RefreshTokens: [],
       UserCreateDate: now,
       UserLastModifiedDate: now,
-      Username: req.Username,
+      Username: username,
       UserStatus: userStatus,
     };
 
@@ -139,7 +157,7 @@ export const SignUp =
       updatedUser,
       userPool,
       messages,
-      req.ClientMetadata
+      req.ClientMetadata,
     );
 
     await userPool.saveUser(ctx, {
@@ -155,14 +173,14 @@ export const SignUp =
         clientId: req.ClientId,
         clientMetadata: req.ClientMetadata,
         source: "PostConfirmation_ConfirmSignUp",
-        username: updatedUser.Username,
+        username,
         userPoolId: userPool.options.Id,
 
         // not sure whether this is a one off for PostConfirmation, or whether we should be adding cognito:user_status
         // into every place we send attributes to lambdas
         userAttributes: attributesAppend(
           updatedUser.Attributes,
-          attribute("cognito:user_status", updatedUser.UserStatus)
+          attribute("cognito:user_status", updatedUser.UserStatus),
         ),
       });
     }
@@ -170,6 +188,6 @@ export const SignUp =
     return {
       CodeDeliveryDetails: deliveryDetails ?? undefined,
       UserConfirmed: updatedUser.UserStatus === "CONFIRMED",
-      UserSub: attributeValue("sub", updatedUser.Attributes) as string,
+      UserSub: sub,
     };
   };

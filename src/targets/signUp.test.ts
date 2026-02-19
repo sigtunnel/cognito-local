@@ -1,3 +1,12 @@
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  type MockedObject,
+  vi,
+} from "vitest";
 import { ClockFake } from "../__tests__/clockFake";
 import { newMockCognitoService } from "../__tests__/mockCognitoService";
 import { newMockMessages } from "../__tests__/mockMessages";
@@ -11,16 +20,16 @@ import {
   UserLambdaValidationError,
   UsernameExistsError,
 } from "../errors";
-import { Messages, Triggers, UserPoolService } from "../services";
-import { SignUp, SignUpTarget } from "./signUp";
-import { Config, DefaultConfig } from "../server/config";
+import { type Config, DefaultConfig } from "../server/config";
+import type { Messages, Triggers, UserPoolService } from "../services";
+import { SignUp, type SignUpTarget } from "./signUp";
 
 describe("SignUp target", () => {
   let signUp: SignUpTarget;
-  let mockUserPoolService: jest.Mocked<UserPoolService>;
-  let mockMessages: jest.Mocked<Messages>;
-  let mockOtp: jest.MockedFunction<() => string>;
-  let mockTriggers: jest.Mocked<Triggers>;
+  let mockUserPoolService: MockedObject<UserPoolService>;
+  let mockMessages: MockedObject<Messages>;
+  let mockOtp: Mock<() => string>;
+  let mockTriggers: MockedObject<Triggers>;
   let now: Date;
   let config: Config;
 
@@ -29,7 +38,7 @@ describe("SignUp target", () => {
 
     mockUserPoolService = newMockUserPoolService();
     mockMessages = newMockMessages();
-    mockOtp = jest.fn();
+    mockOtp = vi.fn();
     mockTriggers = newMockTriggers();
     config = DefaultConfig;
     signUp = SignUp({
@@ -53,11 +62,12 @@ describe("SignUp target", () => {
         Password: "pwd",
         Username: user.Username,
         UserAttributes: [],
-      })
+      }),
     ).rejects.toBeInstanceOf(UsernameExistsError);
   });
 
-  it("saves a new user", async () => {
+  it("saves a new user in a user pool without any user attributes", async () => {
+    mockUserPoolService.options.UsernameAttributes = [];
     mockUserPoolService.getUserByUsername.mockResolvedValue(null);
 
     await signUp(TestContext, {
@@ -85,14 +95,56 @@ describe("SignUp target", () => {
     });
   });
 
+  it("saves a new user in a pool with email as a username attribute", async () => {
+    mockUserPoolService.options.UsernameAttributes = ["email"];
+    mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+
+    await expect(
+      signUp(TestContext, {
+        ClientId: "clientId",
+        Password: "pwd",
+        Username: "user-supplied",
+        UserAttributes: [{ Name: "email", Value: "example@example.com" }],
+      }),
+    ).rejects.toEqual(
+      new InvalidParameterError("Username should be an email."),
+    );
+
+    expect(mockUserPoolService.saveUser).not.toHaveBeenCalled();
+
+    await signUp(TestContext, {
+      ClientId: "clientId",
+      Password: "pwd",
+      Username: "example@example.com",
+      UserAttributes: [{ Name: "email", Value: "example@example.com" }],
+    });
+
+    expect(mockUserPoolService.saveUser).toHaveBeenCalledWith(TestContext, {
+      Attributes: [
+        {
+          Name: "sub",
+          Value: expect.stringMatching(UUID),
+        },
+        { Name: "email", Value: "example@example.com" },
+      ],
+      Enabled: true,
+      Password: "pwd",
+      UserCreateDate: now,
+      UserLastModifiedDate: now,
+      UserStatus: "UNCONFIRMED",
+      Username: expect.stringMatching(UUID),
+      RefreshTokens: [],
+    });
+  });
+
   describe("when PreSignUp trigger is enabled", () => {
     beforeEach(() => {
       mockTriggers.enabled.mockImplementation(
-        (trigger) => trigger === "PreSignUp"
+        (trigger) => trigger === "PreSignUp",
       );
     });
 
-    it("calls the trigger lambda", async () => {
+    it("calls the trigger lambda with the user's username if the user pool has no username attributes", async () => {
       mockUserPoolService.getUserByUsername.mockResolvedValue(null);
       mockTriggers.preSignUp.mockResolvedValue({
         autoConfirmUser: false,
@@ -127,6 +179,42 @@ describe("SignUp target", () => {
       });
     });
 
+    it("calls the trigger lambda with the user's sub if the user pool has email as a username attributes", async () => {
+      mockUserPoolService.options.UsernameAttributes = ["email"];
+      mockUserPoolService.getUserByUsername.mockResolvedValue(null);
+      mockTriggers.preSignUp.mockResolvedValue({
+        autoConfirmUser: false,
+        autoVerifyPhone: false,
+        autoVerifyEmail: false,
+      });
+
+      await signUp(TestContext, {
+        ClientId: "clientId",
+        ClientMetadata: {
+          client: "metadata",
+        },
+        Password: "pwd",
+        Username: "example@example.com",
+        UserAttributes: [{ Name: "email", Value: "example@example.com" }],
+        ValidationData: [{ Name: "another", Value: "attribute" }],
+      });
+
+      expect(mockTriggers.preSignUp).toHaveBeenCalledWith(TestContext, {
+        clientId: "clientId",
+        clientMetadata: {
+          client: "metadata",
+        },
+        source: "PreSignUp_SignUp",
+        userAttributes: [
+          { Name: "sub", Value: expect.stringMatching(UUID) },
+          { Name: "email", Value: "example@example.com" },
+        ],
+        userPoolId: "test",
+        username: expect.stringMatching(UUID),
+        validationData: undefined,
+      });
+    });
+
     it("throws if the trigger lambda fails", async () => {
       mockUserPoolService.getUserByUsername.mockResolvedValue(null);
       mockTriggers.preSignUp.mockRejectedValue(new UserLambdaValidationError());
@@ -141,7 +229,7 @@ describe("SignUp target", () => {
           Username: "user-supplied",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           ValidationData: [{ Name: "another", Value: "attribute" }],
-        })
+        }),
       ).rejects.toBeInstanceOf(UserLambdaValidationError);
     });
 
@@ -171,7 +259,7 @@ describe("SignUp target", () => {
           TestContext,
           expect.objectContaining({
             UserStatus: "CONFIRMED",
-          })
+          }),
         );
       });
 
@@ -179,11 +267,11 @@ describe("SignUp target", () => {
         beforeEach(() => {
           mockTriggers.enabled.mockImplementation(
             (trigger) =>
-              trigger === "PreSignUp" || trigger === "PostConfirmation"
+              trigger === "PreSignUp" || trigger === "PostConfirmation",
           );
         });
 
-        it("calls the PostConfirmation trigger lambda", async () => {
+        it("calls the PostConfirmation trigger lambda with the user's username if the user pool has no username attributes", async () => {
           await signUp(TestContext, {
             ClientId: "clientId",
             ClientMetadata: {
@@ -204,21 +292,55 @@ describe("SignUp target", () => {
               },
               source: "PostConfirmation_ConfirmSignUp",
               userAttributes: [
-                { Name: "sub", Value: expect.stringMatching(UUID) },
-                { Name: "email", Value: "example@example.com" },
                 { Name: "cognito:user_status", Value: "CONFIRMED" },
+                { Name: "email", Value: "example@example.com" },
+                { Name: "sub", Value: expect.stringMatching(UUID) },
               ],
               userPoolId: "test",
               username: "user-supplied",
               validationData: undefined,
-            }
+            },
+          );
+        });
+
+        it("calls the PostConfirmation trigger lambda with the user's sub if the user pool has email as a username attribute", async () => {
+          mockUserPoolService.options.UsernameAttributes = ["email"];
+
+          await signUp(TestContext, {
+            ClientId: "clientId",
+            ClientMetadata: {
+              client: "metadata",
+            },
+            Password: "pwd",
+            Username: "example@example.com",
+            UserAttributes: [{ Name: "email", Value: "example@example.com" }],
+            ValidationData: [{ Name: "another", Value: "attribute" }],
+          });
+
+          expect(mockTriggers.postConfirmation).toHaveBeenCalledWith(
+            TestContext,
+            {
+              clientId: "clientId",
+              clientMetadata: {
+                client: "metadata",
+              },
+              source: "PostConfirmation_ConfirmSignUp",
+              userAttributes: [
+                { Name: "cognito:user_status", Value: "CONFIRMED" },
+                { Name: "email", Value: "example@example.com" },
+                { Name: "sub", Value: expect.stringMatching(UUID) },
+              ],
+              userPoolId: "test",
+              username: expect.stringMatching(UUID),
+              validationData: undefined,
+            },
           );
         });
 
         it("throws if the PostConfirmation lambda fails", async () => {
           mockUserPoolService.getUserByUsername.mockResolvedValue(null);
           mockTriggers.postConfirmation.mockRejectedValue(
-            new UserLambdaValidationError()
+            new UserLambdaValidationError(),
           );
 
           await expect(
@@ -231,7 +353,7 @@ describe("SignUp target", () => {
               Username: "user-supplied",
               UserAttributes: [{ Name: "email", Value: "example@example.com" }],
               ValidationData: [{ Name: "another", Value: "attribute" }],
-            })
+            }),
           ).rejects.toBeInstanceOf(UserLambdaValidationError);
         });
       });
@@ -263,7 +385,7 @@ describe("SignUp target", () => {
           TestContext,
           expect.objectContaining({
             UserStatus: "UNCONFIRMED",
-          })
+          }),
         );
       });
 
@@ -308,7 +430,7 @@ describe("SignUp target", () => {
             { Name: "email", Value: "example@example.com" },
             { Name: "email_verified", Value: "true" },
           ],
-        })
+        }),
       );
     });
 
@@ -337,7 +459,7 @@ describe("SignUp target", () => {
         TestContext,
         expect.objectContaining({
           Attributes: [{ Name: "sub", Value: expect.stringMatching(UUID) }],
-        })
+        }),
       );
     });
 
@@ -370,7 +492,7 @@ describe("SignUp target", () => {
             { Name: "phone_number", Value: "0400000000" },
             { Name: "phone_number_verified", Value: "true" },
           ],
-        })
+        }),
       );
     });
 
@@ -399,7 +521,7 @@ describe("SignUp target", () => {
         TestContext,
         expect.objectContaining({
           Attributes: [{ Name: "sub", Value: expect.stringMatching(UUID) }],
-        })
+        }),
       );
     });
   });
@@ -490,7 +612,7 @@ describe("SignUp target", () => {
             AttributeName: "email",
             DeliveryMedium: "EMAIL",
             Destination: "example@example.com",
-          }
+          },
         );
       });
 
@@ -501,11 +623,11 @@ describe("SignUp target", () => {
             Password: "pwd",
             Username: "user-supplied",
             UserAttributes: [],
-          })
+          }),
         ).rejects.toEqual(
           new InvalidParameterError(
-            "User has no attribute matching desired auto verified attributes"
-          )
+            "User has no attribute matching desired auto verified attributes",
+          ),
         );
 
         expect(mockMessages.deliver).not.toHaveBeenCalled();
@@ -559,7 +681,7 @@ describe("SignUp target", () => {
             AttributeName: "phone_number",
             DeliveryMedium: "SMS",
             Destination: "0400000000",
-          }
+          },
         );
       });
 
@@ -570,11 +692,11 @@ describe("SignUp target", () => {
             Password: "pwd",
             Username: "user-supplied",
             UserAttributes: [],
-          })
+          }),
         ).rejects.toEqual(
           new InvalidParameterError(
-            "User has no attribute matching desired auto verified attributes"
-          )
+            "User has no attribute matching desired auto verified attributes",
+          ),
         );
 
         expect(mockMessages.deliver).not.toHaveBeenCalled();
@@ -635,7 +757,7 @@ describe("SignUp target", () => {
             AttributeName: "phone_number",
             DeliveryMedium: "SMS",
             Destination: "0400000000",
-          }
+          },
         );
       });
 
@@ -681,7 +803,7 @@ describe("SignUp target", () => {
             AttributeName: "email",
             DeliveryMedium: "EMAIL",
             Destination: "example@example.com",
-          }
+          },
         );
       });
 
@@ -692,11 +814,11 @@ describe("SignUp target", () => {
             Password: "pwd",
             Username: "user-supplied",
             UserAttributes: [],
-          })
+          }),
         ).rejects.toEqual(
           new InvalidParameterError(
-            "User has no attribute matching desired auto verified attributes"
-          )
+            "User has no attribute matching desired auto verified attributes",
+          ),
         );
 
         expect(mockMessages.deliver).not.toHaveBeenCalled();

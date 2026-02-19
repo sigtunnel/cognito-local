@@ -1,20 +1,20 @@
-import { StringMap } from "aws-lambda/trigger/cognito-user-pool-trigger/_common";
-import { GroupOverrideDetails } from "aws-lambda/trigger/cognito-user-pool-trigger/pre-token-generation";
-import jwt from "jsonwebtoken";
+import type { StringMap } from "aws-lambda/trigger/cognito-user-pool-trigger/_common";
+import type { GroupOverrideDetails } from "aws-lambda/trigger/cognito-user-pool-trigger/pre-token-generation";
+import type { TimeUnitsType } from "aws-sdk/clients/cognitoidentityserviceprovider";
+import jwt, { type SignOptions } from "jsonwebtoken";
+import type { StringValue, UnitAnyCase } from "ms";
 import * as uuid from "uuid";
 import PrivateKey from "../keys/cognitoLocal.private.json";
-import { AppClient } from "./appClient";
-import { Clock } from "./clock";
-import { Context } from "./context";
-import { Triggers } from "./triggers";
+import type { AppClient } from "./appClient";
+import type { Clock } from "./clock";
+import type { Context } from "./context";
+import type { Triggers } from "./triggers";
 import {
   attributesToRecord,
   attributeValue,
   customAttributes,
-  User,
+  type User,
 } from "./userPoolService";
-
-type ValidityUnit = "seconds" | "minutes" | "hours" | "days" | string;
 
 export interface TokenConfig {
   IssuerDomain?: string;
@@ -65,22 +65,22 @@ type RawToken = Record<
 
 const applyTokenOverrides = (
   token: RawToken,
-  overrides: TokenOverrides
+  overrides: TokenOverrides,
 ): RawToken => {
   // TODO: support group overrides
 
   const claimsToSuppress = (overrides?.claimsToSuppress ?? []).filter(
-    (claim) => !RESERVED_CLAIMS.includes(claim)
+    (claim) => !RESERVED_CLAIMS.includes(claim),
   );
 
   const claimsToOverride = Object.entries(
-    overrides?.claimsToAddOrOverride ?? []
+    overrides?.claimsToAddOrOverride ?? [],
   ).filter(([claim]) => !RESERVED_CLAIMS.includes(claim));
 
   return Object.fromEntries(
     [...Object.entries(token), ...claimsToOverride].filter(
-      ([claim]) => !claimsToSuppress.includes(claim)
-    )
+      ([claim]) => !claimsToSuppress.includes(claim),
+    ),
   );
 };
 
@@ -102,15 +102,29 @@ export interface TokenGenerator {
       | "Authentication"
       | "HostedAuth"
       | "NewPasswordChallenge"
-      | "RefreshTokens"
+      | "RefreshTokens",
   ): Promise<Tokens>;
+}
+
+function assertUnitAnyCase(unit: string): asserts unit is UnitAnyCase {
+  if (!["seconds", "minutes", "hours", "days"].includes(unit)) {
+    throw new Error(`Invalid unit: ${unit}`);
+  }
 }
 
 const formatExpiration = (
   duration: number | undefined,
-  unit: ValidityUnit,
-  fallback: string
-): string => (duration ? `${duration}${unit}` : fallback);
+  unit: TimeUnitsType,
+  fallback: StringValue,
+): StringValue => {
+  if (duration === undefined) {
+    return fallback;
+  }
+
+  assertUnitAnyCase(unit);
+
+  return `${duration}${unit}`;
+};
 
 export class JwtTokenGenerator implements TokenGenerator {
   private readonly clock: Clock;
@@ -120,7 +134,7 @@ export class JwtTokenGenerator implements TokenGenerator {
   public constructor(
     clock: Clock,
     triggers: Triggers,
-    tokenConfig: TokenConfig
+    tokenConfig: TokenConfig,
   ) {
     this.clock = clock;
     this.triggers = triggers;
@@ -138,7 +152,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       | "Authentication"
       | "HostedAuth"
       | "NewPasswordChallenge"
-      | "RefreshTokens"
+      | "RefreshTokens",
   ): Promise<Tokens> {
     const eventId = uuid.v4();
     const authTime = Math.floor(this.clock.get().getTime() / 1000);
@@ -160,7 +174,7 @@ export class JwtTokenGenerator implements TokenGenerator {
       auth_time: authTime,
       email: attributeValue("email", user.Attributes),
       email_verified: Boolean(
-        attributeValue("email_verified", user.Attributes) ?? false
+        attributeValue("email_verified", user.Attributes) ?? false,
       ),
       event_id: eventId,
       iat: authTime,
@@ -203,21 +217,21 @@ export class JwtTokenGenerator implements TokenGenerator {
         expiresIn: formatExpiration(
           userPoolClient.AccessTokenValidity,
           userPoolClient.TokenValidityUnits?.AccessToken ?? "hours",
-          "24h"
+          "24h",
         ),
         keyid: "CognitoLocal",
-      }),
+      } satisfies SignOptions),
       IdToken: jwt.sign(idToken, PrivateKey.pem, {
         algorithm: "RS256",
         issuer,
         expiresIn: formatExpiration(
           userPoolClient.IdTokenValidity,
           userPoolClient.TokenValidityUnits?.IdToken ?? "hours",
-          "24h"
+          "24h",
         ),
         audience: userPoolClient.ClientId,
         keyid: "CognitoLocal",
-      }),
+      } satisfies SignOptions),
       // this content is for debugging purposes only
       // in reality token payload is encrypted and uses different algorithm
       RefreshToken: jwt.sign(
@@ -234,9 +248,9 @@ export class JwtTokenGenerator implements TokenGenerator {
           expiresIn: formatExpiration(
             userPoolClient.RefreshTokenValidity,
             userPoolClient.TokenValidityUnits?.RefreshToken ?? "days",
-            "7d"
+            "7d",
           ),
-        }
+        } satisfies SignOptions,
       ),
     };
   }

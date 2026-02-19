@@ -1,18 +1,18 @@
+import fs from "node:fs";
+import { promisify } from "node:util";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestContext } from "../src/__tests__/testContext";
 import { DateClock } from "../src/services";
 import {
-  CognitoServiceFactory,
+  type CognitoServiceFactory,
   CognitoServiceFactoryImpl,
   USER_POOL_AWS_DEFAULTS,
 } from "../src/services/cognitoService";
-import fs from "fs";
-import { promisify } from "util";
-import { NoOpCache } from "../src/services/dataStore/cache";
 import { StormDBDataStoreFactory } from "../src/services/dataStore/stormDb";
 import { UserPoolServiceFactoryImpl } from "../src/services/userPoolService";
 
 const mkdtemp = promisify(fs.mkdtemp);
-const rmdir = promisify(fs.rmdir);
+const rm = promisify(fs.rm);
 
 describe("Cognito Service", () => {
   let dataDirectory: string;
@@ -22,23 +22,19 @@ describe("Cognito Service", () => {
     dataDirectory = await mkdtemp("/tmp/cognito-local:");
 
     const clock = new DateClock();
-    const dataStoreFactory = new StormDBDataStoreFactory(
-      dataDirectory,
-      new NoOpCache()
-    );
+    const dataStoreFactory = new StormDBDataStoreFactory(dataDirectory);
 
     factory = new CognitoServiceFactoryImpl(
       dataDirectory,
-      clock,
       dataStoreFactory,
-      new UserPoolServiceFactoryImpl(clock, dataStoreFactory)
+      new UserPoolServiceFactoryImpl(clock, dataStoreFactory),
     );
   });
 
   afterEach(() =>
-    rmdir(dataDirectory, {
+    rm(dataDirectory, {
       recursive: true,
-    })
+    }),
   );
 
   describe("CognitoServiceFactory", () => {
@@ -52,17 +48,37 @@ describe("Cognito Service", () => {
   it("creates a user pool database", async () => {
     const cognitoService = await factory.create(TestContext, {});
 
-    await cognitoService.getUserPool(TestContext, "test-pool");
+    await cognitoService.createUserPool(TestContext, {
+      Id: "test-pool",
+      Name: "Test Pool",
+    });
 
     expect(fs.existsSync(`${dataDirectory}/test-pool.json`)).toBe(true);
+
+    const userPool = await cognitoService.getUserPool(TestContext, "test-pool");
+
+    expect(userPool.options).toEqual({
+      ...USER_POOL_AWS_DEFAULTS,
+      Id: "test-pool",
+      Name: "Test Pool",
+    });
   });
 
   it("lists multiple user pools", async () => {
     const cognitoService = await factory.create(TestContext, {});
 
-    await cognitoService.getUserPool(TestContext, "test-pool-1");
-    await cognitoService.getUserPool(TestContext, "test-pool-2");
-    await cognitoService.getUserPool(TestContext, "test-pool-3");
+    await cognitoService.createUserPool(TestContext, {
+      Id: "test-pool-1",
+      Name: "Test Pool 1",
+    });
+    await cognitoService.createUserPool(TestContext, {
+      Id: "test-pool-2",
+      Name: "Test Pool 2",
+    });
+    await cognitoService.createUserPool(TestContext, {
+      Id: "test-pool-3",
+      Name: "Test Pool 3",
+    });
 
     expect(fs.existsSync(`${dataDirectory}/test-pool-1.json`)).toBe(true);
     expect(fs.existsSync(`${dataDirectory}/test-pool-2.json`)).toBe(true);
@@ -70,26 +86,32 @@ describe("Cognito Service", () => {
 
     const pools = await cognitoService.listUserPools(TestContext);
     expect(pools).toEqual([
-      { ...USER_POOL_AWS_DEFAULTS, Id: "test-pool-1" },
-      { ...USER_POOL_AWS_DEFAULTS, Id: "test-pool-2" },
-      { ...USER_POOL_AWS_DEFAULTS, Id: "test-pool-3" },
+      { ...USER_POOL_AWS_DEFAULTS, Id: "test-pool-1", Name: "Test Pool 1" },
+      { ...USER_POOL_AWS_DEFAULTS, Id: "test-pool-2", Name: "Test Pool 2" },
+      { ...USER_POOL_AWS_DEFAULTS, Id: "test-pool-3", Name: "Test Pool 3" },
     ]);
   });
 
   it("deletes user pools", async () => {
     const cognitoService = await factory.create(TestContext, {});
 
-    const up1 = await cognitoService.getUserPool(TestContext, "test-pool-1");
-    const up2 = await cognitoService.getUserPool(TestContext, "test-pool-2");
+    const up1 = await cognitoService.createUserPool(TestContext, {
+      Id: "test-pool-1",
+      Name: "Test Pool 1",
+    });
+    const up2 = await cognitoService.createUserPool(TestContext, {
+      Id: "test-pool-2",
+      Name: "Test Pool-2",
+    });
 
     expect(fs.existsSync(`${dataDirectory}/test-pool-1.json`)).toBe(true);
     expect(fs.existsSync(`${dataDirectory}/test-pool-2.json`)).toBe(true);
 
-    await cognitoService.deleteUserPool(TestContext, up1.options);
+    await cognitoService.deleteUserPool(TestContext, up1);
 
     expect(fs.existsSync(`${dataDirectory}/test-pool-1.json`)).not.toBe(true);
 
-    await cognitoService.deleteUserPool(TestContext, up2.options);
+    await cognitoService.deleteUserPool(TestContext, up2);
 
     expect(fs.existsSync(`${dataDirectory}/test-pool-2.json`)).not.toBe(true);
   });

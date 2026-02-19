@@ -1,15 +1,19 @@
-import fs from "fs";
-import { promisify } from "util";
+import fs from "node:fs";
+import { promisify } from "node:util";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TestContext } from "../src/__tests__/testContext";
-import { CognitoService, DateClock, UserPoolService } from "../src/services";
+import {
+  type CognitoService,
+  DateClock,
+  type UserPoolService,
+} from "../src/services";
 import { CognitoServiceFactoryImpl } from "../src/services/cognitoService";
-import { NoOpCache } from "../src/services/dataStore/cache";
 import { StormDBDataStoreFactory } from "../src/services/dataStore/stormDb";
 import { UserPoolServiceFactoryImpl } from "../src/services/userPoolService";
 
 const mkdtemp = promisify(fs.mkdtemp);
 const readFile = promisify(fs.readFile);
-const rmdir = promisify(fs.rmdir);
+const rm = promisify(fs.rm);
 
 const validUsernameExamples = ["ExampleUsername", "example.username"];
 
@@ -20,35 +24,31 @@ describe("User Pool Service", () => {
   beforeEach(async () => {
     dataDirectory = await mkdtemp("/tmp/cognito-local:");
     const clock = new DateClock();
-    const dataStoreFactory = new StormDBDataStoreFactory(
-      dataDirectory,
-      new NoOpCache()
-    );
+    const dataStoreFactory = new StormDBDataStoreFactory(dataDirectory);
 
     cognitoClient = await new CognitoServiceFactoryImpl(
       dataDirectory,
-      clock,
       dataStoreFactory,
-      new UserPoolServiceFactoryImpl(clock, dataStoreFactory)
+      new UserPoolServiceFactoryImpl(clock, dataStoreFactory),
     ).create(TestContext, {});
   });
 
   afterEach(() =>
-    rmdir(dataDirectory, {
+    rm(dataDirectory, {
       recursive: true,
-    })
+    }),
   );
-
-  it("creates a database", async () => {
-    await cognitoClient.getUserPool(TestContext, "local");
-
-    expect(fs.existsSync(dataDirectory + "/local.json")).toBe(true);
-  });
 
   describe("saveUser", () => {
     describe.each(validUsernameExamples)("with username %s", (username) => {
       it("saves the user", async () => {
         const now = new Date();
+
+        await cognitoClient.createUserPool(TestContext, {
+          Id: "local",
+          Name: "Local",
+        });
+
         const userPool = await cognitoClient.getUserPool(TestContext, "local");
 
         await userPool.saveUser(TestContext, {
@@ -66,7 +66,7 @@ describe("User Pool Service", () => {
         });
 
         const file = JSON.parse(
-          await readFile(dataDirectory + "/local.json", "utf-8")
+          await readFile(`${dataDirectory}/local.json`, "utf-8"),
         );
 
         expect(file.Users).toEqual({
@@ -88,6 +88,12 @@ describe("User Pool Service", () => {
 
       it("updates a user", async () => {
         const now = new Date();
+
+        await cognitoClient.createUserPool(TestContext, {
+          Id: "local",
+          Name: "Local",
+        });
+
         const userPool = await cognitoClient.getUserPool(TestContext, "local");
 
         await userPool.saveUser(TestContext, {
@@ -106,7 +112,7 @@ describe("User Pool Service", () => {
         });
 
         let file = JSON.parse(
-          await readFile(dataDirectory + "/local.json", "utf-8")
+          await readFile(`${dataDirectory}/local.json`, "utf-8"),
         );
 
         expect(file.Users).toEqual({
@@ -141,7 +147,7 @@ describe("User Pool Service", () => {
         });
 
         file = JSON.parse(
-          await readFile(dataDirectory + "/local.json", "utf-8")
+          await readFile(`${dataDirectory}/local.json`, "utf-8"),
         );
 
         expect(file.Users).toEqual({
@@ -167,6 +173,11 @@ describe("User Pool Service", () => {
     describe.each(validUsernameExamples)("with username %s", (username) => {
       let userPool: UserPoolService;
       beforeAll(async () => {
+        await cognitoClient.createUserPool(TestContext, {
+          Id: "local",
+          Name: "Local",
+        });
+
         userPool = await cognitoClient.getUserPool(TestContext, "local");
 
         await userPool.saveUser(TestContext, {
@@ -205,6 +216,11 @@ describe("User Pool Service", () => {
     let userPool: UserPoolService;
 
     beforeAll(async () => {
+      await cognitoClient.createUserPool(TestContext, {
+        Id: "local",
+        Name: "Local",
+      });
+
       userPool = await cognitoClient.getUserPool(TestContext, "local");
 
       await userPool.saveUser(TestContext, {
@@ -232,7 +248,7 @@ describe("User Pool Service", () => {
     it("returns user by their refresh token", async () => {
       const user = await userPool.getUserByRefreshToken(
         TestContext,
-        "refresh token"
+        "refresh token",
       );
 
       expect(user).not.toBeNull();
@@ -259,6 +275,11 @@ describe("User Pool Service", () => {
     let userPool: UserPoolService;
 
     beforeAll(async () => {
+      await cognitoClient.createUserPool(TestContext, {
+        Id: "local",
+        Name: "Local",
+      });
+
       userPool = await cognitoClient.getUserPool(TestContext, "local");
 
       await userPool.saveUser(TestContext, user);
@@ -269,7 +290,7 @@ describe("User Pool Service", () => {
 
       const foundUser = await userPool.getUserByRefreshToken(
         TestContext,
-        "refresh token"
+        "refresh token",
       );
 
       expect(foundUser).toMatchObject({
@@ -285,6 +306,12 @@ describe("User Pool Service", () => {
 
     beforeAll(async () => {
       now = new Date();
+
+      await cognitoClient.createUserPool(TestContext, {
+        Id: "local",
+        Name: "Local",
+      });
+
       userPool = await cognitoClient.getUserPool(TestContext, "local");
 
       await userPool.saveUser(TestContext, {

@@ -1,4 +1,4 @@
-import {
+import type {
   VerifyUserAttributeRequest,
   VerifyUserAttributeResponse,
 } from "aws-sdk/clients/cognitoidentityserviceprovider";
@@ -8,10 +8,10 @@ import {
   InvalidParameterError,
   NotAuthorizedError,
 } from "../errors";
-import { Services } from "../services";
-import { Token } from "../services/tokenGenerator";
+import type { Services } from "../services";
+import type { Token } from "../services/tokenGenerator";
 import { attribute, attributesAppend } from "../services/userPoolService";
-import { Target } from "./Target";
+import type { Target } from "./Target";
 
 export type VerifyUserAttributeTarget = Target<
   VerifyUserAttributeRequest,
@@ -34,7 +34,7 @@ export const VerifyUserAttribute =
 
     const userPool = await cognito.getUserPoolForClientId(
       ctx,
-      decodedToken.client_id
+      decodedToken.client_id,
     );
     const user = await userPool.getUserByUsername(ctx, decodedToken.sub);
     if (!user) {
@@ -45,23 +45,32 @@ export const VerifyUserAttribute =
       throw new CodeMismatchError();
     }
 
+    const attributesToUpdate = [
+      ...user.Attributes,
+      ...(user.UnverifiedAttributeChanges ?? []),
+    ];
+
     if (req.AttributeName === "email") {
       await userPool.saveUser(ctx, {
         ...user,
         Attributes: attributesAppend(
-          user.Attributes,
-          attribute("email_verified", "true")
+          attributesToUpdate,
+          attribute("email_verified", "true"),
         ),
         UserLastModifiedDate: clock.get(),
+        UnverifiedAttributeChanges: undefined,
+        AttributeVerificationCode: undefined,
       });
     } else if (req.AttributeName === "phone_number") {
       await userPool.saveUser(ctx, {
         ...user,
         Attributes: attributesAppend(
-          user.Attributes,
-          attribute("phone_number_verified", "true")
+          attributesToUpdate,
+          attribute("phone_number_verified", "true"),
         ),
         UserLastModifiedDate: clock.get(),
+        UnverifiedAttributeChanges: undefined,
+        AttributeVerificationCode: undefined,
       });
     } else {
       // not sure what to do here

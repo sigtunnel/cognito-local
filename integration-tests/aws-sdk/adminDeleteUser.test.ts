@@ -1,6 +1,5 @@
+import { describe, expect, it } from "vitest";
 import { ClockFake } from "../../src/__tests__/clockFake";
-import { UUID } from "../../src/__tests__/patterns";
-import { UserNotFoundError } from "../../src/errors";
 import { withCognitoSdk } from "./setup";
 
 const currentDate = new Date();
@@ -16,12 +15,19 @@ describe(
       it("deletes a user", async () => {
         const client = Cognito();
 
+        const pool = await client
+          .createUserPool({
+            PoolName: "test",
+          })
+          .promise();
+        const userPoolId = pool.UserPool?.Id!;
+
         // create the user
         const createUserResult = await client
           .adminCreateUser({
             UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -29,7 +35,7 @@ describe(
         const beforeUserResult = await client
           .adminGetUser({
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -46,7 +52,7 @@ describe(
         await client
           .adminDeleteUser({
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -55,14 +61,24 @@ describe(
           client
             .adminGetUser({
               Username: "abc",
-              UserPoolId: "test",
+              UserPoolId: userPoolId,
             })
-            .promise()
-        ).rejects.toEqual(new UserNotFoundError("User does not exist."));
+            .promise(),
+        ).rejects.toMatchObject({
+          name: "UserNotFoundException",
+          message: "User does not exist.",
+        });
       });
 
       it("deletes a user with an email address as a username", async () => {
         const client = Cognito();
+
+        const pool = await client
+          .createUserPool({
+            PoolName: "test",
+          })
+          .promise();
+        const userPoolId = pool.UserPool?.Id!;
 
         // create the user
         const createUserResult = await client
@@ -72,7 +88,7 @@ describe(
               { Name: "phone_number", Value: "0400000000" },
             ],
             Username: "example@example.com",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -80,7 +96,7 @@ describe(
         const beforeUserResult = await client
           .adminGetUser({
             Username: "example@example.com",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -97,7 +113,7 @@ describe(
         await client
           .adminDeleteUser({
             Username: "example@example.com",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -106,14 +122,17 @@ describe(
           client
             .adminGetUser({
               Username: "example@example.com",
-              UserPoolId: "test",
+              UserPoolId: userPoolId,
             })
-            .promise()
-        ).rejects.toEqual(new UserNotFoundError("User does not exist."));
+            .promise(),
+        ).rejects.toMatchObject({
+          name: "UserNotFoundException",
+          message: "User does not exist.",
+        });
       });
     },
     {
       clock,
-    }
-  )
+    },
+  ),
 );

@@ -1,5 +1,5 @@
 import * as AWS from "aws-sdk";
-import pino from "pino";
+import type pino from "pino";
 import {
   DateClock,
   LambdaService,
@@ -7,20 +7,19 @@ import {
   TriggersService,
 } from "../services";
 import { CognitoServiceFactoryImpl } from "../services/cognitoService";
-import { InMemoryCache } from "../services/dataStore/cache";
+import { CryptoService } from "../services/crypto";
 import { StormDBDataStoreFactory } from "../services/dataStore/stormDb";
 import { ConsoleMessageSender } from "../services/messageDelivery/consoleMessageSender";
 import { MessageDeliveryService } from "../services/messageDelivery/messageDelivery";
 import { otp } from "../services/otp";
 import { JwtTokenGenerator } from "../services/tokenGenerator";
 import { UserPoolServiceFactoryImpl } from "../services/userPoolService";
-import { Router } from "./Router";
 import { loadConfig } from "./config";
-import { createServer, Server } from "./server";
-import { CryptoService } from "../services/crypto";
+import { Router } from "./Router";
+import { createServer, type Server } from "./server";
 
 export const createDefaultServer = async (
-  logger: pino.Logger
+  logger: pino.Logger,
 ): Promise<Server> => {
   const configDirectory = ".cognito";
   const dataDirectory = `${configDirectory}/db`;
@@ -31,36 +30,32 @@ export const createDefaultServer = async (
   const config = await loadConfig(
     ctx,
     // the config gets a separate factory because it's stored in a different directory
-    new StormDBDataStoreFactory(configDirectory, new InMemoryCache())
+    new StormDBDataStoreFactory(configDirectory),
   );
 
   logger.debug({ config }, "Loaded config");
 
   const clock = new DateClock();
 
-  const dataStoreFactory = new StormDBDataStoreFactory(
-    dataDirectory,
-    new InMemoryCache()
-  );
+  const dataStoreFactory = new StormDBDataStoreFactory(dataDirectory);
 
   const cognitoServiceFactory = new CognitoServiceFactoryImpl(
     dataDirectory,
-    clock,
     dataStoreFactory,
-    new UserPoolServiceFactoryImpl(clock, dataStoreFactory)
+    new UserPoolServiceFactoryImpl(clock, dataStoreFactory),
   );
   const cognitoClient = await cognitoServiceFactory.create(
     ctx,
-    config.UserPoolDefaults
+    config.UserPoolDefaults,
   );
   const triggers = new TriggersService(
     clock,
     cognitoClient,
     new LambdaService(
       config.TriggerFunctions,
-      new AWS.Lambda(config.LambdaClient)
+      new AWS.Lambda(config.LambdaClient),
     ),
-    new CryptoService(config.KMSConfig)
+    new CryptoService(config.KMSConfig),
   );
 
   return createServer(
@@ -70,19 +65,17 @@ export const createDefaultServer = async (
       config,
       messages: new MessagesService(
         triggers,
-        new MessageDeliveryService(new ConsoleMessageSender())
+        new MessageDeliveryService(new ConsoleMessageSender()),
       ),
       otp,
       tokenGenerator: new JwtTokenGenerator(
         clock,
         triggers,
-        config.TokenConfig
+        config.TokenConfig,
       ),
       triggers,
     }),
     logger,
-    {
-      development: !!process.env.COGNITO_LOCAL_DEVMODE,
-    }
+    config.ServerConfig,
   );
 };

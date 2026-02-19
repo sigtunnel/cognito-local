@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { ClockFake } from "../../src/__tests__/clockFake";
 import { withCognitoSdk } from "./setup";
 
@@ -14,19 +15,26 @@ describe(
       it("sets a permanent password", async () => {
         const client = Cognito();
 
+        const pool = await client
+          .createUserPool({
+            PoolName: "test",
+          })
+          .promise();
+        const userPoolId = pool.UserPool?.Id!;
+
         // create the user
         const createUserResult = await client
           .adminCreateUser({
             UserAttributes: [{ Name: "phone_number", Value: "0400000000" }],
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
         await client
           .adminSetUserPassword({
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
             Password: "newPassword",
             Permanent: true,
           })
@@ -36,7 +44,7 @@ describe(
         const result = await client
           .adminGetUser({
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
           .promise();
 
@@ -52,6 +60,6 @@ describe(
     },
     {
       clock,
-    }
-  )
+    },
+  ),
 );

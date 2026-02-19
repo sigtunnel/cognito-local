@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { withCognitoSdk } from "./setup";
 
 describe(
@@ -6,9 +7,16 @@ describe(
     it("handles NEW_PASSWORD_REQUIRED challenge", async () => {
       const client = Cognito();
 
+      const pool = await client
+        .createUserPool({
+          PoolName: "test",
+        })
+        .promise();
+      const userPoolId = pool.UserPool?.Id!;
+
       const upc = await client
         .createUserPoolClient({
-          UserPoolId: "test",
+          UserPoolId: userPoolId,
           ClientName: "test",
         })
         .promise();
@@ -19,7 +27,7 @@ describe(
           TemporaryPassword: "def",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
-          UserPoolId: "test",
+          UserPoolId: userPoolId,
         })
         .promise();
 
@@ -55,5 +63,5 @@ describe(
         ChallengeParameters: {},
       });
     });
-  })
+  }),
 );

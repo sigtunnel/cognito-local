@@ -1,29 +1,35 @@
+import { readFileSync } from "node:fs";
+import * as http from "node:http";
+import * as https from "node:https";
 import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
-import * as http from "http";
 import type { Logger } from "pino";
+import Pino from "pino-http";
 import * as uuid from "uuid";
 import { CognitoError, UnsupportedError } from "../errors";
-import { Router } from "./Router";
 import PublicKey from "../keys/cognitoLocal.public.json";
-import Pino from "pino-http";
+import type { Router } from "./Router";
 
-export interface ServerOptions {
-  port: number;
-  hostname: string;
-  development: boolean;
-}
+export type ServerOptions = {
+  port?: number;
+  hostname?: string;
+  development?: boolean;
+} & (
+  | { https: true; key?: string; ca?: string; cert?: string }
+  | { https?: false }
+);
 
 export interface Server {
-  application: any; // eslint-disable-line
-  start(options?: Partial<ServerOptions>): Promise<http.Server>;
+  // biome-ignore lint/suspicious/noExplicitAny: don't want to export express types
+  application: any;
+  start(): Promise<http.Server | https.Server>;
 }
 
 export const createServer = (
   router: Router,
   logger: Logger,
-  options: Partial<ServerOptions> = {}
+  options: ServerOptions,
 ): Server => {
   const pino = Pino({
     logger,
@@ -41,15 +47,15 @@ export const createServer = (
   app.use(
     cors({
       origin: "*",
-    })
+    }),
   );
   app.use(
     bodyParser.json({
       type: "application/x-amz-json-1.1",
-    })
+    }),
   );
 
-  app.get("/:userPoolId/.well-known/jwks.json", (req, res) => {
+  app.get("/:userPoolId/.well-known/jwks.json", (_req, res) => {
     res.status(200).json({
       keys: [PublicKey.jwk],
     });
@@ -67,7 +73,7 @@ export const createServer = (
     });
   });
 
-  app.get("/health", (req, res) => {
+  app.get("/health", (_req, res) => {
     res.status(200).json({ ok: true });
   });
 
@@ -77,7 +83,7 @@ export const createServer = (
     if (!xAmzTarget) {
       res.status(400).json({ message: "Missing x-amz-target header" });
       return;
-    } else if (xAmzTarget instanceof Array) {
+    } else if (Array.isArray(xAmzTarget)) {
       res.status(400).json({ message: "Too many x-amz-target headers" });
       return;
     }
@@ -89,10 +95,10 @@ export const createServer = (
     }
 
     const route = router(target);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: generic wrapper
     const replacer: (this: any, key: string, value: any) => any = function (
       key,
-      value
+      value,
     ) {
       if (this[key] instanceof Date) {
         return Math.floor(this[key].getTime() / 1000);
@@ -102,7 +108,10 @@ export const createServer = (
 
     route({ logger: req.log }, req.body).then(
       (output) =>
-        res.status(200).type("json").send(JSON.stringify(output, replacer)),
+        res
+          .status(200)
+          .type("application/x-amz-json-1.1")
+          .send(JSON.stringify(output, replacer)),
       (ex) => {
         if (ex instanceof UnsupportedError) {
           if (options.development) {
@@ -135,28 +144,34 @@ export const createServer = (
           res.status(500).json(ex);
           return;
         }
-      }
+      },
     );
   });
 
   return {
     application: app,
-    start(startOptions) {
-      const actualOptions: ServerOptions = {
-        port: options?.port ?? 9229,
-        hostname: options?.hostname ?? "localhost",
-        development: options?.development ?? false,
-        ...options,
-        ...startOptions,
-      };
+    start() {
+      const hostname = options.hostname;
+      const port = options.port;
 
-      return new Promise((resolve, reject) => {
-        const httpServer = app.listen(
-          actualOptions.port,
-          actualOptions.hostname,
-          () => resolve(httpServer)
-        );
-        httpServer.on("error", reject);
+      return new Promise<http.Server | https.Server>((resolve, reject) => {
+        const server = options.https
+          ? https.createServer(
+              {
+                ca: options.ca ? readFileSync(options.ca, "utf-8") : undefined,
+                cert: options.cert
+                  ? readFileSync(options.cert, "utf-8")
+                  : undefined,
+                key: options.key
+                  ? readFileSync(options.key, "utf-8")
+                  : undefined,
+              },
+              app,
+            )
+          : http.createServer(app);
+
+        server.listen(port, hostname, () => resolve(server));
+        server.on("error", reject);
       });
     },
   };

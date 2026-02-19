@@ -1,4 +1,4 @@
-import { UserNotFoundError } from "../../src/errors";
+import { describe, expect, it } from "vitest";
 import { withCognitoSdk } from "./setup";
 
 describe(
@@ -7,10 +7,17 @@ describe(
     it("deletes the current user", async () => {
       const client = Cognito();
 
+      const pool = await client
+        .createUserPool({
+          PoolName: "test",
+        })
+        .promise();
+      const userPoolId = pool.UserPool?.Id!;
+
       // create the user pool client
       const upc = await client
         .createUserPoolClient({
-          UserPoolId: "test",
+          UserPoolId: userPoolId,
           ClientName: "test",
         })
         .promise();
@@ -22,7 +29,7 @@ describe(
           TemporaryPassword: "def",
           UserAttributes: [{ Name: "email", Value: "example@example.com" }],
           Username: "abc",
-          UserPoolId: "test",
+          UserPoolId: userPoolId,
         })
         .promise();
 
@@ -31,7 +38,7 @@ describe(
           Password: "newPassword",
           Permanent: true,
           Username: "abc",
-          UserPoolId: "test",
+          UserPoolId: userPoolId,
         })
         .promise();
 
@@ -59,10 +66,13 @@ describe(
         client
           .adminGetUser({
             Username: "abc",
-            UserPoolId: "test",
+            UserPoolId: userPoolId,
           })
-          .promise()
-      ).rejects.toEqual(new UserNotFoundError("User does not exist."));
+          .promise(),
+      ).rejects.toMatchObject({
+        name: "UserNotFoundException",
+        message: "User does not exist.",
+      });
     });
-  })
+  }),
 );
