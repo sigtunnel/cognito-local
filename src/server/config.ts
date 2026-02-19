@@ -23,6 +23,8 @@ export interface Config {
 
 const port = parseInt(process.env.PORT ?? "9229", 10);
 const hostname = process.env.HOST ?? "localhost";
+const issuerHostname = process.env.OPEN_ID_ISSUER_HOSTNAME ?? "localhost";
+const issuerPort = process.env.OPEN_ID_ISSUER_PORT ?? String(port);
 
 export const DefaultConfig: Config = {
   LambdaClient: {
@@ -37,7 +39,7 @@ export const DefaultConfig: Config = {
     UsernameAttributes: ["email"],
   },
   TokenConfig: {
-    IssuerDomain: `http://${hostname}:${port}`,
+    IssuerDomain: `http://${issuerHostname}:${issuerPort}`,
   },
   KMSConfig: {
     credentials: {
