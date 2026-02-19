@@ -16,7 +16,7 @@ A _Good Enough_ offline emulator for [Amazon Cognito](https://aws.amazon.com/cog
   - [Updating your application](#updating-your-application)
   - [Creating your first User Pool](#creating-your-first-user-pool)
 - [Configuration](#configuration)
-  - [Custom Email Sender Trigger](#custom-email-sender-trigger)
+  - [Custom Email Sender Trigger](#custom-email-xsender-trigger)
   - [HTTPS endpoints with self-signed certificates](#https-endpoints-with-self-signed-certificates)
   - [User Pools and Clients](#user-pools-and-clients)
 - [Known Limitations](#known-limitations)
@@ -31,7 +31,7 @@ A _Good Enough_ offline emulator for [Amazon Cognito](https://aws.amazon.com/cog
 
 * Login to Docker Hub: `docker login --username=sigtunnel`
 * List all available local Docker images: `docker images`
-* Tag Docker image to match Docker Hub account: `docker tag 2a1c263e4d97 sigtunnel/aws_cognito:1.0`
+* Build Docker image: `docker build -t sigtunnel/aws_cognito:1.0 .`
 * Push Docker image to Docker Hub: `docker push sigtunnel/aws_cognito:1.0`
 
 ## Supported Features
