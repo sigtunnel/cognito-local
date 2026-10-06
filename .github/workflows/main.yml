@@ -1,10 +1,12 @@
 name: CI
 
 on:
+  # This repository's default branch is dev; master (the upstream's branch) does not exist here,
+  # so CI never ran. Publishing is unaffected: publish.yml and semantic-release (package.json) still release from master only.
   push:
-    branches: [master]
+    branches: [dev]
   pull_request:
-    branches: [master]
+    branches: [dev]
 
 jobs:
   lint:
