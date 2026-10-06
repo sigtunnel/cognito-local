@@ -6,3 +6,21 @@ updates:
       interval: daily
     versioning-strategy: increase
 
+  # GitHub Actions are pinned to full commit SHAs with the version as a trailing comment;
+  # Dependabot moves the SHA and the comment together. A new release is proposed only once it
+  # is a week old (compromised releases are usually withdrawn within days); security updates
+  # are not delayed. Majors arrive together in one pull request.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      actions-major:
+        patterns: ["*"]
+        update-types: [major]
