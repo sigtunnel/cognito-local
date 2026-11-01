@@ -19,9 +19,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      # The Dockerfile's node images and package.json's packageManager must agree with .tool-versions.
+      # The two places that repeat .tool-versions: the Dockerfile's node images and package.json's
+      # packageManager (CI's Node itself comes from .tool-versions). This repository is public, so
+      # it cannot use github-workflows' check-tool-versions action, which is private.
       - name: Check the tool versions
-        uses: sigtunnel/github-workflows/.github/actions/check-tool-versions@8cdf7022e8902ff0cd2a3621a8a79d8fb05da1d4 # v1.0.19
+        run: |
+          node=$(awk '$1 == "nodejs" { print $2; exit }' .tool-versions)
+          yarn=$(awk '$1 == "yarn" { print $2; exit }' .tool-versions)
+          status=0
+          while read -r line; do
+            image=$(awk '{ print $2 }' <<<"$line")
+            if [[ $image != "node:$node-"* && $image != "node:$node" ]]; then
+              echo "::error file=Dockerfile::$image differs from nodejs $node in .tool-versions"
+              status=1
+            fi
+          done < <(grep -E '^FROM node:' Dockerfile)
+          manager=$(node -p 'require("./package.json").packageManager' 2>/dev/null || true)
+          if [[ $manager != "yarn@$yarn" ]]; then
+            echo "::error file=package.json::packageManager $manager differs from yarn $yarn in .tool-versions"
+            status=1
+          fi
+          exit $status
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .tool-versions
