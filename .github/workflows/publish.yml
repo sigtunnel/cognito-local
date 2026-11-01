@@ -1,4 +1,7 @@
 ### This workflow has access to secrets and a read-write token
+# The upstream's release (npm and Docker Hub). It never runs in this fork: it follows CI on master,
+# which this repository does not have (its default branch is dev), and the fork has none of its
+# secrets. Kept unchanged so the fork's diff from upstream stays small.
 name: Publish
 on:
   workflow_run:
