@@ -1,13 +1,20 @@
 ### This workflow has access to secrets and a read-write token
-# The upstream's release (npm and Docker Hub). It never runs in this fork: it follows CI on master,
-# which this repository does not have (its default branch is dev), and the fork has none of its
-# secrets. Kept unchanged so the fork's diff from upstream stays small.
+# The upstream's release (npm and Docker Hub). It never publishes from this fork: it follows CI on
+# master, which this repository does not have (its default branch is dev), the fork has none of its
+# secrets, and the publish job runs only in the upstream's repository. A manual run builds, on the
+# runner it names (a lab Raspberry Pi: main.yml says which), to check the build part works there.
 name: Publish
 on:
   workflow_run:
     branches: [master]
     types: [completed]
     workflows: [CI]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "A runner label (pi-worker-16gb-2) for the build job; empty: GitHub's ubuntu-latest"
+        required: false
+        default: ""
 
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
@@ -17,9 +24,9 @@ jobs:
   # doesn't allow you to download artifacts from other workflows, despite GitHub pushing that as the recommended
   # work-around for Dependabot permissions. See: https://github.com/actions/download-artifact/issues/60
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Build
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -40,7 +47,8 @@ jobs:
     runs-on: ubuntu-latest
     name: Publish
     needs: build
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # The upstream's release only: never from a fork.
+    if: ${{ github.repository == 'jagregory/cognito-local' && github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
