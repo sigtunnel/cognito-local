@@ -7,13 +7,22 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
+  # A manual run on dev may name a runner: one of the lab's Raspberry Pis (pi-worker-16gb-2), whose
+  # runner group for this public repository takes only this workflow and publish.yml, at dev
+  # (sigtunnel/lab-setup). Pushes and pull requests always run on GitHub's runners.
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "A runner label (pi-worker-16gb-2); empty: GitHub's ubuntu-latest"
+        required: false
+        default: ""
 
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Lint
     timeout-minutes: 5
 
@@ -50,7 +59,7 @@ jobs:
       - run: yarn lint
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Test
     timeout-minutes: 5
 
@@ -66,7 +75,7 @@ jobs:
       - run: yarn test
 
   smoke_test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Smoke Test
     timeout-minutes: 5
 
@@ -82,7 +91,7 @@ jobs:
       - run: scripts/smoke-test
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Build
     needs:
       - lint
