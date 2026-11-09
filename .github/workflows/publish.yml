@@ -16,6 +16,12 @@ on:
         required: false
         default: ""
 
+# Read only, here: the publish job, the only one that would write (semantic-release's tag and
+# GitHub release, with GH_TOKEN), runs only in the upstream's repository. main.yml says why there is
+# no refuse-untrusted guard in this public repository.
+permissions:
+  contents: read
+
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
@@ -26,7 +32,9 @@ jobs:
   build:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Build
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Never after a pull request's CI: a fork's pull request from a branch named master would
+    # otherwise match workflow_run's branches filter (github-workflows' README, "Workflow security").
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request') }}
     
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -48,7 +56,7 @@ jobs:
     name: Publish
     needs: build
     # The upstream's release only: never from a fork.
-    if: ${{ github.repository == 'jagregory/cognito-local' && github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.repository == 'jagregory/cognito-local' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request' }}
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

@@ -1,10 +1,14 @@
 version: 2
 updates:
+  # A new release is proposed only once it is a week old: compromised packages are usually
+  # withdrawn within days. Security updates are not delayed.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: daily
     versioning-strategy: increase
+    cooldown:
+      default-days: 7
 
   # GitHub Actions are pinned to full commit SHAs with the version as a trailing comment;
   # Dependabot moves the SHA and the comment together. A new release is proposed only once it

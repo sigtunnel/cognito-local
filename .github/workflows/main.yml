@@ -17,6 +17,15 @@ on:
         required: false
         default: ""
 
+# Every job only reads the repository. This repository is public, so it cannot use
+# github-workflows' private actions: no refuse-untrusted guard and no check-workflow-security here
+# (the lab's benchmark checks it from github-workflows' side, with the no-guard findings accepted
+# for this reason). Untrusted code cannot reach a lab runner anyway: only a manual run names a
+# runner (a pull request's inputs.runner is empty, so its jobs run on ubuntu-latest), and the
+# public runner group takes only this workflow and publish.yml, at dev.
+permissions:
+  contents: read
+
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
