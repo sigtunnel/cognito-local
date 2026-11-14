@@ -7,13 +7,14 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
-  # A manual run on dev may name a runner: one of the lab's Raspberry Pis (pi-worker-16gb-2), whose
-  # runner group for this public repository takes only this workflow and publish.yml, at dev
-  # (sigtunnel/lab-setup). Pushes and pull requests always run on GitHub's runners.
+  # A manual run on dev may name a runner: one of the lab's Raspberry Pis (pi-worker-16gb-1, -2
+  # or -3), whose runner group for this public repository takes only this workflow and
+  # publish.yml, at dev (sigtunnel/lab-setup). Pushes and pull requests always run on GitHub's
+  # runners.
   workflow_dispatch:
     inputs:
       runner:
-        description: "A runner label (pi-worker-16gb-2); empty: GitHub's ubuntu-latest"
+        description: "A runner label (pi-worker-16gb-1, -2 or -3); empty: GitHub's ubuntu-latest"
         required: false
         default: ""
 
@@ -29,11 +30,14 @@ permissions:
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
+# Each job gets 10 minutes. On the lab's Raspberry Pis (2026-11-07) they took up to 3 min 46 s
+# (Lint), 3 min 28 s to 4 min 50 s (Test), 4 min 22 s (Smoke Test) and 4 min 15 s (Build), mostly
+# in setup-node and yarn install; on GitHub's runner each takes about 1 minute.
 jobs:
   lint:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Lint
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -70,7 +74,7 @@ jobs:
   test:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Test
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -86,7 +90,7 @@ jobs:
   smoke_test:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Smoke Test
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -102,6 +106,7 @@ jobs:
   build:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Build
+    timeout-minutes: 10
     needs:
       - lint
       - test
