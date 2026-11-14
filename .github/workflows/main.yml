@@ -70,7 +70,9 @@ jobs:
   test:
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     name: Test
-    timeout-minutes: 5
+    # On the lab's Raspberry Pis (2026-11-07) this job took 3 min 44 s to 4 min 50 s, mostly
+    # setup-node and yarn install; GitHub's runner takes about 1 min.
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
